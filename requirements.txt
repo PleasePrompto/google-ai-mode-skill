@@ -1,0 +1,15 @@
+# Google AI Mode Skill Dependencies
+# Installed in local .venv via run.py
+
+# Core browser automation with anti-detection
+patchright==1.57.2
+
+# HTML parsing for content extraction
+beautifulsoup4==4.14.3
+
+# HTML to Markdown conversion
+# Primary option (Rust-based, fast)
+html-to-markdown==2.19.6
+# Fallback options (will be used if primary fails)
+# markdownify>=0.11.6
+# html2text>=2020.1.16
