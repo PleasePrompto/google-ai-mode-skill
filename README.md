@@ -10,7 +10,7 @@ Transform your LLM's online research capabilities by connecting Claude Code dire
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-Skill-purple.svg)](https://www.anthropic.com/news/skills)
-[![Based on](https://img.shields.io/badge/Based%20on-Google%20AI%20Mode%20MCP-green.svg)](https://github.com/geromed/google-ai-mode-mcp)
+[![Based on](https://img.shields.io/badge/Based%20on-Google%20AI%20Mode%20MCP-green.svg)](https://github.com/PleasePrompto/google-ai-mode-mcp)
 
 ### Why This Matters
 
