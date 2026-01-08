@@ -19,7 +19,68 @@ class BrowserFactory:
         """
         Launch browser with PERSISTENT CONTEXT - keeps cookies/session!
         This dramatically reduces CAPTCHA occurrences.
+
+        Sets English as preferred language (but multi-language selectors handle any locale).
         """
+        import json
+
+        # Step 1: Set Local State (profile-wide settings)
+        local_state_file = BROWSER_PROFILE_DIR / "Local State"
+        local_state = {}
+        if local_state_file.exists():
+            try:
+                with open(local_state_file, 'r', encoding='utf-8') as f:
+                    local_state = json.load(f)
+            except:
+                local_state = {}
+
+        # Force English in Local State
+        local_state.update({
+            "intl": {
+                "app_locale": "en",  # CRITICAL: Chrome UI language
+                "accept_languages": "en-US,en"
+            }
+        })
+
+        with open(local_state_file, 'w', encoding='utf-8') as f:
+            json.dump(local_state, f, indent=2)
+
+        # Step 2: Set Default/Preferences (per-profile settings)
+        prefs_dir = BROWSER_PROFILE_DIR / "Default"
+        prefs_dir.mkdir(parents=True, exist_ok=True)
+        prefs_file = prefs_dir / "Preferences"
+
+        prefs = {}
+        if prefs_file.exists():
+            # Load existing preferences to preserve cookies/session
+            try:
+                with open(prefs_file, 'r', encoding='utf-8') as f:
+                    prefs = json.load(f)
+            except:
+                prefs = {}
+
+        # FORCE English language settings
+        prefs.update({
+            "intl": {
+                "accept_languages": "en-US,en",
+                "selected_languages": "en-US,en",
+                "app_locale": "en"  # Redundant but ensures consistency
+            },
+            "translate": {
+                "enabled": False  # Disable auto-translate
+            },
+            "webkit": {
+                "webprefs": {
+                    "default_charset": "utf-8"
+                }
+            }
+        })
+
+        # Write preferences atomically
+        with open(prefs_file, 'w', encoding='utf-8') as f:
+            json.dump(prefs, f, indent=2)
+
+        # NOW launch browser (will read our forced preferences)
         return playwright.chromium.launch_persistent_context(
             str(BROWSER_PROFILE_DIR),  # Persistent profile directory
             channel="chrome",  # Use real Chrome for better anti-detection

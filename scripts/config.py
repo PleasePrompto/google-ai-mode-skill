@@ -37,7 +37,8 @@ BROWSER_ARGS = [
     '--no-sandbox',
     '--no-first-run',
     '--no-default-browser-check',
-    '--lang=en-US'  # Force English for consistent selectors
+    '--lang=en',  # CRITICAL: Must be 'en' not 'en-US' for UI language!
+    '--disable-translate',  # Disable auto-translate popup
 ]
 
 USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'

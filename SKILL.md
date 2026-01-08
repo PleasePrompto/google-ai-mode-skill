@@ -193,12 +193,14 @@ python scripts/run.py search.py --query "Microservices security patterns 2026 (A
 | No AI overview found | Rephrase query with more specificity using optimization template |
 | Browser fails to start | Verify internet connection and Chrome installation |
 | Need detailed logs | Use `--debug` flag - log saved to `logs/` folder |
+| AI Mode not available | Your region/country doesn't support Google AI Mode. Use a proxy/VPN to access from supported regions (US, UK, Germany, etc.) |
 
 **Exit Codes:**
 - `0` - Success
 - `1` - General error
 - `2` - CAPTCHA required (retry with `--show-browser`)
 - `3` - Browser closed by user
+- `4` - AI Mode not available in region (use proxy/VPN)
 - `130` - User interrupted (Ctrl+C)
 
 ## Best Practices

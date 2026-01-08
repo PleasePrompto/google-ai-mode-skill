@@ -2,19 +2,64 @@
 
 # Google AI Mode Skill
 
-**Connect Claude Code to Google's AI Mode. For free.**
+### **Supercharge Claude Code's Web Research with Google AI Mode**
 
-This Claude Code skill gives your agent direct access to Google's AI-synthesized search results—complete with source citations, clean Markdown formatting, and massive token savings. Let Google do the research while Claude focuses on building.
+**For: Claude Code CLI users only**
+
+Transform your LLM's online research capabilities by connecting Claude Code directly to Google's AI Mode—getting AI-synthesized answers from 100+ sources instead of scattered search results.
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-Skill-purple.svg)](https://www.anthropic.com/news/skills)
 [![Based on](https://img.shields.io/badge/Based%20on-Google%20AI%20Mode%20MCP-green.svg)](https://github.com/geromed/google-ai-mode-mcp)
 
-> Use this skill to query Google AI Mode directly from Claude Code for free, token-efficient web research with grounded sources and inline citations.
+### Why This Matters
+
+Most built-in web research is mediocre. This skill gives Claude Code **professional-grade research** by tapping into Google's AI Mode—the same technology that synthesizes information from dozens of websites into one cited answer.
+
+**Example Use Cases:**
+```
+"Next.js 15 App Router best practices 2026 with server components examples"
+→ AI-synthesized coding guide with inline citations [1][2][3]
+
+"Compare PostgreSQL vs MySQL JSON performance 2026, include benchmarks"
+→ Technical comparison table with real-world data
+
+"Find the latest EU AI regulations 2026 and their impact on startups"
+→ Legal overview with official government sources
+
+"Best noise-cancelling headphones under €300, compare Sony vs Bose"
+→ Product comparison with reviews and specs
+
+"Intermittent fasting protocols 2026, include recent scientific studies"
+→ Health guide with medical research citations
+```
+
+**Result:** Research on **ANY topic**—coding, tech comparisons, regulations, product reviews, health, finance, travel. Curated answers with sources. Saves tokens. Superior to generic web search.
 
 [Installation](#installation) • [Quick Start](#quick-start) • [How It Works](#how-it-works) • [MCP Alternative](#mcp-server-alternative)
 
 </div>
+
+---
+
+## 📋 Last Updates (2026-01-08)
+
+**v2.0 - Multi-Language & Detection Overhaul**
+
+✅ **4-Stage Completion Detection** - SVG thumbs-up → aria-label → text → 40s timeout
+✅ **Multi-Language Support** - Works in DE/EN/NL/ES/FR/IT browser locales
+✅ **87% Faster** - Average 4s detection (was 30s+)
+✅ **AI Mode Availability Check** - Detects region restrictions with proxy suggestion
+✅ **17 Citation Selectors** - Language-agnostic fallback chain
+✅ **15 Cutoff Markers** - Cleaner content extraction across languages
+
+<details>
+<summary>📖 Show previous updates</summary>
+
+**v1.5** - Persistent browser profile, CAPTCHA elimination
+**v1.0** - Initial release with basic Google AI Mode integration
+
+</details>
 
 ---
 

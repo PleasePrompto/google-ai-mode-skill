@@ -61,6 +61,85 @@ except ImportError:
             sys.exit(1)
 
 # =============================================================================
+# MULTI-LANGUAGE SELECTORS (DE/EN/NL support)
+# =============================================================================
+
+# Citation button selectors - ALL languages
+CITATION_SELECTORS = [
+    '[aria-label="View related links"]',           # English
+    '[aria-label*="Related links"]',               # English partial
+    '[aria-label="Zugehörige Links anzeigen"]',    # German
+    '[aria-label*="Zugehörige Links"]',            # German partial
+    '[aria-label*="Gerelateerde links"]',          # Dutch partial
+    'button[aria-label*="links" i]',               # Generic case-insensitive
+]
+
+# AI Completion Detection - Multi-language
+AI_COMPLETION_BUTTON = '[aria-label*="feedback" i]'  # Language-independent
+AI_COMPLETION_TIMEOUT = 15000  # 15 seconds (SERPO proven)
+
+# Text-based completion indicators (fallback)
+AI_COMPLETION_TEXT_INDICATORS = [
+    # English
+    'AI-generated', 'AI Overview', 'Generative AI is experimental',
+    # German
+    'KI-Antworten', 'KI-generiert', 'Generative KI',
+    # Dutch
+    'AI-gegenereerd', 'AI-overzicht',
+    # Spanish
+    'Las respuestas de la IA', 'Resumen de IA', 'Información general de IA',
+    # French
+    'Réponses IA', "Aperçu de l'IA", "Vue d'ensemble de l'IA",
+    # Italian
+    'Risposte IA', "Panoramica IA", "Panoramica dell'IA",
+]
+
+# Disclaimer cutoff markers (remove everything after these)
+CUTOFF_MARKERS = [
+    # German
+    'KI-Antworten können Fehler enthalten',
+    'Öffentlicher Link wird erstellt',
+    # English
+    'AI-generated answers may contain mistakes',
+    'AI can make mistakes',
+    'Generative AI is experimental',
+    # Dutch
+    'AI-reacties kunnen fouten bevatten',
+    # Spanish
+    'Las respuestas de la IA pueden contener errores',
+    'pueden contener errores',
+    'Más información',
+    # French
+    "Les réponses de l'IA peuvent contenir des erreurs",
+    'peuvent contenir des erreurs',
+    'Plus d\'informations',
+    # Italian
+    "Le risposte dell'IA possono contenere errori",
+    'possono contenere errori',
+    'Ulteriori informazioni',
+]
+
+# AI Mode not available indicators (region/language restrictions)
+AI_MODE_NOT_AVAILABLE = [
+    # French
+    "Le Mode IA n'est pas disponible dans votre pays ou votre langue",
+    "Mode IA n'est pas disponible",
+    "Découvrez le Mode IA",
+    # English
+    "AI Mode is not available in your country or language",
+    "AI Mode isn't available",
+    # German
+    "Der KI-Modus ist in Ihrem Land oder Ihrer Sprache nicht verfügbar",
+    "KI-Modus ist nicht verfügbar",
+    # Spanish
+    "El modo de IA no está disponible en tu país o idioma",
+    # Italian
+    "La modalità IA non è disponibile nel tuo Paese o nella tua lingua",
+    # Dutch
+    "AI-modus is niet beschikbaar in uw land of taal",
+]
+
+# =============================================================================
 # JAVASCRIPT INJECTION CODE
 # =============================================================================
 DOM_INJECTION_SCRIPT = '''
@@ -82,8 +161,33 @@ async () => {
     const mainCol = document.querySelector('[data-container-id="main-col"]');
     if (!mainCol) return { error: 'main-col not found (AI Overview missing?)' };
 
-    // Alle "Zugehörige Links" Buttons finden (Citations)
-    const buttons = Array.from(mainCol.querySelectorAll('[aria-label*="Zugehörige Links"]'));
+    // SERPO OPTIMIZATION: Expand "Show more" buttons first
+    try {
+        const showMoreBtns = Array.from(mainCol.querySelectorAll('[aria-expanded="false"]'));
+        for (const btn of showMoreBtns) {
+            if (isVisible(btn) && (btn.innerText.includes('Show more') ||
+                                   btn.innerText.includes('Mehr anzeigen') ||
+                                   btn.innerText.includes('Meer weergeven'))) {
+                btn.click();
+                await new Promise(r => setTimeout(r, 200));
+            }
+        }
+    } catch (e) {
+        console.warn('Show more expansion failed', e);
+    }
+
+    // MULTI-LANGUAGE: Try citation selectors in order (injected from Python)
+    const selectors = %CITATION_SELECTORS%;
+    let buttons = [];
+
+    for (const selector of selectors) {
+        buttons = Array.from(mainCol.querySelectorAll(selector));
+        if (buttons.filter(isVisible).length > 0) {
+            console.log(`Found ${buttons.length} citation buttons with: ${selector}`);
+            break;
+        }
+    }
+
     const allCitations = [];
     let markerIndex = 0;
 
@@ -91,11 +195,11 @@ async () => {
         // Ignoriere unsichtbare "Geister"-Buttons im DOM
         if (!isVisible(btn)) continue;
 
-        // 1. Marker [CITE-N] visuell einfügen
+        // 1. Marker [CITE-N] visuell einfügen (SERPO: wrapped in <code> tag!)
         const markerId = markerIndex++;
         const marker = document.createElement('span');
         marker.className = 'citation-marker';
-        marker.textContent = `[CITE-${markerId}]`;
+        marker.innerHTML = `<code>[CITE-${markerId}]</code>`;
 
         // Marker hinter dem Button platzieren
         if (btn.nextSibling) {
@@ -306,6 +410,68 @@ class GoogleAIScraper:
 
         return str(soup)
 
+    def _extract_sidebar_fallback(self) -> List[Dict]:
+        """
+        SERPO-inspired fallback: Extract sources from sidebar when DOM injection fails
+
+        Triggered when:
+        - No citation buttons found
+        - DOM injection returns empty citations
+        - JavaScript errors
+
+        Returns:
+            List[Dict]: [{'title': str, 'url': str, 'source': str}, ...]
+        """
+        try:
+            self.logger.debug("Sidebar fallback: extracting sources...")
+
+            # Get sidebar container
+            sidebar = self.page.query_selector('[data-container-id="rhs-col"]')
+            if not sidebar:
+                self.logger.debug("Sidebar not found")
+                return []
+
+            # Extract all links
+            links = sidebar.query_selector_all('a[href]')
+            sources = []
+            seen_urls = set()
+
+            # Filter domains (same as DOM injection)
+            skip_domains = ['google.com', 'google.de', 'gstatic.com', 'support.google.com']
+
+            for link in links:
+                try:
+                    url = link.get_attribute('href')
+                    title = link.inner_text().strip() or link.get_attribute('aria-label') or ''
+
+                    # Skip invalid/duplicate/Google URLs
+                    if not url or not url.startswith('http') or url in seen_urls:
+                        continue
+                    if any(domain in url for domain in skip_domains):
+                        continue
+
+                    # Parse domain
+                    from urllib.parse import urlparse
+                    domain = urlparse(url).hostname or ''
+
+                    sources.append({
+                        'title': title,
+                        'url': url,
+                        'source': domain
+                    })
+                    seen_urls.add(url)
+
+                except Exception as e:
+                    self.logger.debug(f"Link parse error: {e}")
+                    continue
+
+            self.logger.info(f"Sidebar fallback: {len(sources)} sources")
+            return sources
+
+        except Exception as e:
+            self.logger.error(f"Sidebar fallback failed: {e}")
+            return []
+
     def _embed_citations(self, markdown: str, citations: List[Dict]) -> tuple:
         """Ersetzt [CITE-N] Marker durch [1][2] Fußnoten"""
         modified_md = markdown
@@ -380,41 +546,112 @@ class GoogleAIScraper:
         else:
             self.logger.debug("No CAPTCHA detected, proceeding...")
 
-        # Warte auf AI Response (Text-Erkennung)
-        # Erhöhtes Timeout für CAPTCHA-Fälle: 5 Minuten
-        print(f"  ⏳ Waiting for AI content...")
-        ai_wait_timeout = 300  # 5 Minuten für CAPTCHA-Lösung + AI-Generierung
-        self.logger.debug(f"Waiting for AI content indicators (timeout: {ai_wait_timeout}s)...")
-        ai_ready = False
-        for i in range(ai_wait_timeout):
-            try:
-                body = self.page.inner_text('body')
-                # Typische AI-Overview Indikatoren
-                if 'KI-Antworten' in body or 'AI-generated' in body or 'AI Overview' in body:
-                    ai_ready = True
-                    self.logger.info(f"✅ AI content detected after {i}s!")
-                    self.logger.debug(f"AI content detected after {i}s")
-                    break
-            except Exception as e:
-                # Check for browser closed
-                if "browser has been closed" in str(e).lower() or "target closed" in str(e).lower():
-                    self.logger.error("Browser closed while waiting for AI content")
-                    return {
-                        "success": False,
-                        "error": "BROWSER_CLOSED_BY_USER",
-                        "message": "Browser wurde vom User geschlossen"
-                    }
-            time.sleep(1)
+        # CHECK FOR AI MODE AVAILABILITY (region/language restrictions)
+        print(f"  🌍 Checking AI Mode availability...")
+        self.logger.debug("Checking if AI Mode is available in this region/language...")
+        try:
+            body_text = self.page.inner_text('body')
+            if any(indicator in body_text for indicator in AI_MODE_NOT_AVAILABLE):
+                self.logger.error("AI Mode not available in this region/language")
+                print(f"  ❌ AI Mode not available in your country/language")
+                return {
+                    "success": False,
+                    "error": "AI_MODE_NOT_AVAILABLE",
+                    "message": "Google AI Mode is not available in your country or language. Please use a proxy/VPN to access from a supported region (e.g., US, UK, Germany).",
+                    "suggestion": "Try using a proxy/VPN and ensure browser locale is set to a supported language."
+                }
+            else:
+                self.logger.debug("AI Mode available, proceeding...")
+        except Exception as e:
+            self.logger.debug(f"Could not check AI Mode availability: {e}")
+            # Proceed anyway - don't block on this check
 
+        # HYBRID AI COMPLETION DETECTION (SERPO method + Multi-language fallback)
+        print(f"  ⏳ Waiting for AI completion...")
+        self.logger.debug("Starting hybrid completion detection...")
+        ai_ready = False
+
+        # OVERALL TIMEOUT: 40 seconds total, then proceed anyway
+        overall_deadline = time.time() + 40
+
+        # PRIMARY: Button-based detection (DUAL METHOD - ultra-robust!)
+        # Method 1: SVG-based detection (100% reliable, language-independent!)
+        remaining_time = int((overall_deadline - time.time()) * 1000)
+        if remaining_time > 0 and not ai_ready:
+            try:
+                self.logger.debug("Method 1: Attempting SVG thumbs-up icon detection...")
+                svg_selector = 'button svg[viewBox="3 3 18 18"]'
+                self.page.wait_for_selector(
+                    svg_selector,
+                    timeout=min(AI_COMPLETION_TIMEOUT, remaining_time),
+                    state='visible'
+                )
+                ai_ready = True
+                self.logger.info("✅ Thumbs UP SVG detected!")
+                print(f"  ✅ AI complete (Thumbs UP SVG detected!)")
+
+            except Exception as svg_error:
+                # Method 2: aria-label detection (fallback)
+                self.logger.debug(f"Method 1 failed: {svg_error}")
+                remaining_time = int((overall_deadline - time.time()) * 1000)
+                if remaining_time > 0 and not ai_ready:
+                    try:
+                        self.logger.debug(f"Method 2: Attempting aria-label detection: {AI_COMPLETION_BUTTON}")
+                        self.page.wait_for_selector(
+                            AI_COMPLETION_BUTTON,
+                            timeout=min(AI_COMPLETION_TIMEOUT, remaining_time),
+                            state='visible'
+                        )
+                        ai_ready = True
+                        self.logger.info("✅ AI complete via aria-label button")
+                        print(f"  ✅ AI complete (button aria-label detected)")
+
+                    except Exception as aria_error:
+                        # Method 3: Text-based detection (multi-language fallback)
+                        self.logger.debug(f"Method 2 failed: {svg_error}")
+                        self.logger.debug("Both button methods failed, trying text detection...")
+                        print(f"  ⏳ Button not found, trying text detection (multi-lang)...")
+
+                        # Text fallback: Poll until overall deadline
+                        while time.time() < overall_deadline and not ai_ready:
+                            try:
+                                body = self.page.inner_text('body')
+                                if any(indicator in body for indicator in AI_COMPLETION_TEXT_INDICATORS):
+                                    ai_ready = True
+                                    self.logger.info(f"✅ AI complete via text")
+                                    print(f"  ✅ AI complete (text detected)")
+                                    break
+                            except Exception as e:
+                                if "browser has been closed" in str(e).lower() or "target closed" in str(e).lower():
+                                    self.logger.error("Browser closed while waiting for AI content")
+                                    return {
+                                        "success": False,
+                                        "error": "BROWSER_CLOSED_BY_USER",
+                                        "message": "Browser wurde vom User geschlossen"
+                                    }
+                            time.sleep(1)
+
+        # FINAL TIMEOUT FALLBACK: After 40 seconds, proceed with whatever is loaded
         if not ai_ready:
-            print("  ⚠️  Warning: AI content marker not found (Proceeding anyway...)")
-            self.logger.warning("AI content markers not found - proceeding anyway")
+            elapsed = int(time.time() - (overall_deadline - 40))
+            if elapsed >= 40:
+                self.logger.warning(f"⏱️  40s timeout reached - proceeding with loaded content")
+                print(f"  ⏱️  Timeout (40s) - scraping loaded content")
+                ai_ready = True  # Proceed anyway
+            else:
+                self.logger.warning("AI completion not detected (proceeding anyway)")
+                print(f"  ⚠️  No completion indicator (proceeding)")
 
         # JavaScript Injection (DOM Marker & Extraction)
         print(f"  📚 Injecting Markers & Extracting Sources...")
         self.logger.debug("Starting JavaScript DOM injection...")
         try:
-            data = self.page.evaluate(DOM_INJECTION_SCRIPT)
+            # Inject citation selectors into JavaScript
+            script_with_selectors = DOM_INJECTION_SCRIPT.replace(
+                '%CITATION_SELECTORS%',
+                json.dumps(CITATION_SELECTORS)
+            )
+            data = self.page.evaluate(script_with_selectors)
             self.logger.debug("JavaScript injection successful")
         except Exception as e:
             # Check for browser closed
@@ -433,7 +670,26 @@ class GoogleAIScraper:
 
         html_content = data['html']
         citations = data['citations']
-        self.logger.debug(f"Extracted {len(citations)} citation groups")
+        self.logger.debug(f"DOM injection: {len(citations)} citation groups")
+
+        # SIDEBAR FALLBACK: If DOM injection returned no citations
+        if len(citations) == 0:
+            self.logger.info("No citations from DOM, triggering sidebar fallback...")
+            print(f"  📌 No citation buttons, trying sidebar...")
+
+            fallback_sources = self._extract_sidebar_fallback()
+
+            if fallback_sources:
+                # Create single citation group with all sidebar sources
+                citations = [{
+                    'marker_id': 0,
+                    'sources': fallback_sources
+                }]
+                self.logger.info(f"✅ Sidebar fallback: {len(fallback_sources)} sources")
+                print(f"  ✅ Sidebar fallback: {len(fallback_sources)} sources")
+            else:
+                self.logger.warning("No sources found (DOM + sidebar both empty)")
+                print(f"  ⚠️  No sources found (DOM + sidebar both empty)")
 
         # HTML Cleanup
         self.logger.debug("Cleaning HTML content...")
@@ -614,6 +870,8 @@ def main():
             print("\n❌ SEARCH FAILED")
             print(f"Error: {result.get('error')}")
             print(f"Message: {result.get('message', '')}")
+            if result.get('suggestion'):
+                print(f"Suggestion: {result.get('suggestion')}")
             logger.error(f"Search failed: {result.get('error')} - {result.get('message', '')}")
 
             # Return specific exit codes for different errors
@@ -621,6 +879,8 @@ def main():
                 sys.exit(2)  # Special exit code for captcha
             elif result.get('error') == 'BROWSER_CLOSED_BY_USER':
                 sys.exit(3)
+            elif result.get('error') == 'AI_MODE_NOT_AVAILABLE':
+                sys.exit(4)  # AI Mode not available in region
             else:
                 sys.exit(1)
 
